@@ -1,4 +1,3 @@
-https://www.cyhone.com/articles/analysis-of-muduo/
 本文分为三个部分：
 1. 由Reactor模型理解muudo的网络库模型
 2. base部分的部分理解
@@ -139,7 +138,7 @@ pthread_key_setspecific
 
 muduo的I/O模型采用非阻塞模式，避免阻塞在read()或write()或其他系统调用上
 ## Socket
-
+KeepAlive：https://zhuanlan.zhihu.com/p/28894266
 socket阻塞和非阻塞有哪些不同
 > 1. 建立连接
 >>阻塞方式下，connect首先发送SYN请求到服务器，当客户端收到服务器返回的SYN的确认时，则connect返回，否则的话一直阻塞。
@@ -232,6 +231,18 @@ private:
     int epollfd_;
     EventList events_;//存放返回的就绪事件
 ```
+sokect()：创建listenfd
+bind()：将listenfd和服务器IP地址和端口号绑定
+listen()：让listenfd处于监听状态
+accept()：当有客户端发起请求时，服务socket变得可读
+
+
+socket()
+bind()
+connect()
+
+
+
 
 ## Channel
 不管是poll还是epoll，最终的事件都会存放到channel中
@@ -391,6 +402,15 @@ TcpConnection在构造函数中开启了保活机制。
 ## TcpServer
 就是一个服务器。
 该类即支持单线程，也支持多线程。
+![image](https://user-images.githubusercontent.com/40709975/131514420-3cacd96a-780d-4119-9396-bdad8471e205.png)
+
+TcpServer的构造函数最少要传三个参数：EventLoop，InetAddress，string。还有第四个参数，这个参数给了默认值，默认为0，还可以给1，默认值是在构造Acceptor对象的时候，不开启ReusePort，为1的时候则去开启。
+![image](https://user-images.githubusercontent.com/40709975/131514741-1079b0ec-cd39-49ff-ba03-c420b5626473.png)
+注意这个loop，可以看到该loop还参与了Acceptor和EventLoopThreadPool的初始化
+![image](https://user-images.githubusercontent.com/40709975/131515032-2cd2808a-b6bd-418d-939a-731634424bdc.png)
+Acceptor的初始化中，又用该loop初始化了Channel
+![image](https://user-images.githubusercontent.com/40709975/131515172-a96fad28-2d4b-410e-8bd8-1b678d69d21f.png)
+由此可见baseloop（主Reactor）的TcpServer，Acceptor，EventLoopThreadPool和Channel的loop都是同一个。
 start：
 Acceptor::listen----->acceptChannel_.enableReading()------>loop_->updateChannel(this)------>poller_->updateChannel(channel)
 
@@ -471,5 +491,6 @@ std::equal(start, end, const char*)比较函数
 封装了一下TcpServer，实现的比较简单
 ![image](https://user-images.githubusercontent.com/40709975/131464747-7d462a90-1591-47ed-a62b-4011dd1cfb8f.png)
 
-
+HTTP请求头：http://tools.jb51.net/table/http_header
+HTTP管道化，队头阻塞，管道化/非管道化：https://blog.csdn.net/fesfsefgs/article/details/108294050
 
