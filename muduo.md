@@ -406,10 +406,16 @@ TcpConnection在构造函数中开启了保活机制。
 
 TcpServer的构造函数最少要传三个参数：EventLoop，InetAddress，string。还有第四个参数，这个参数给了默认值，默认为0，还可以给1，默认值是在构造Acceptor对象的时候，不开启ReusePort，为1的时候则去开启。
 ![image](https://user-images.githubusercontent.com/40709975/131514741-1079b0ec-cd39-49ff-ba03-c420b5626473.png)
-注意这个loop，可以看到该loop还参与了Acceptor和EventLoopThreadPool的初始化
+
+注意这个loop，可以看到该loop还参与了Acceptor和EventLoopThreadPool的初始化：
 ![image](https://user-images.githubusercontent.com/40709975/131515032-2cd2808a-b6bd-418d-939a-731634424bdc.png)
-Acceptor的初始化中，又用该loop初始化了Channel
+
+Acceptor的初始化中，又用该loop初始化了Channel：
 ![image](https://user-images.githubusercontent.com/40709975/131515172-a96fad28-2d4b-410e-8bd8-1b678d69d21f.png)
+
+EventLoopThreadPool的初始化需要传一个loop来标明baseloop是谁：
+![image](https://user-images.githubusercontent.com/40709975/131516099-0f25941d-17b8-4add-b315-b950bf764c16.png)
+
 由此可见baseloop（主Reactor）的TcpServer，Acceptor，EventLoopThreadPool和Channel的loop都是同一个。
 start：
 Acceptor::listen----->acceptChannel_.enableReading()------>loop_->updateChannel(this)------>poller_->updateChannel(channel)
