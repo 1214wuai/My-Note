@@ -7,8 +7,7 @@ https://www.cyhone.com/articles/analysis-of-muduo/
 
 # Reactor
 Reactor 模式，市面上常见的开源软件很多都采用了这个方案，比如 Redis、Nginx、Netty 
-![176a6299856d16e311a13e0e4ad70c2c.png](en-resource://database/1100:1)
-
+![image](https://user-images.githubusercontent.com/40709975/131463506-b8737431-bcee-48aa-af4a-6eda2136ba75.png)
 ## 演进
 1. 一个线程处理一个连接，处理完毕之后释放线程
 2. 资源复用，创建线程池，一个线程处理多个连接，线程会阻塞在read操作上，解决方式：
