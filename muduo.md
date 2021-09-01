@@ -430,13 +430,18 @@ EventLoopThreadPool的初始化需要传一个loop来标明baseloop是谁：
 start：
 Acceptor::listen----->acceptChannel_.enableReading()------>loop_->updateChannel(this)------>poller_->updateChannel(channel)
 
-建立连接：
+### 建立连接：
 ![image](https://user-images.githubusercontent.com/40709975/131464408-950f8d35-9506-4b8c-af79-799614f05722.png)
 ![TcpServer](https://user-images.githubusercontent.com/40709975/131464486-f64a6ad0-b5e4-4b69-ac8b-4845955dcf5b.png)
 
 ![image](https://user-images.githubusercontent.com/40709975/131644376-a287a90a-3dbb-42bc-8e5c-01e3f756a56b.png)
 
-关闭连接：
+### 关闭连接：
+muduo断开连接的方式：
+1. 被动关闭：即对方先关闭连接，本地read()返回0，触发关闭逻辑，调用TcpConnection::handleClose()
+2. 主动关闭：本地调用forceClose()，调用TcpConnection::handleClose()
+3. Channel监听到POLLHUP事件，并且没有POLLIN事件，调用channel的closeCallback_
+
 
 * Channel的close回调就是TcpConnection中的handleClose（在TcpConnection构造函数中设置）
 * HandleRead调用readFd的返回值是0，会调用handleClose
@@ -448,7 +453,7 @@ handleClose-->clsoeCallback_（在TcpServer的newConnection中设置）-->remove
 
 ![image](https://user-images.githubusercontent.com/40709975/131464551-ff7668ab-63da-42be-af7c-92ac8defd5ee.png)
 
-TcpConnection的removeConnection，erase将这个连接对象从列表中移除。按照正常的思路，我们还应该将这个对象销毁掉，但是在这里我们不能立即销毁这个连接对象，如果销毁了这个对象，TcpConnection所包含的Channel对象也就跟着销毁了。而当前正在调用这个Channel对象的handleEvent函数，而这个Channel对象又销毁了，就会出现coredump。因而这个不能销毁TcpConnection对象，也就是说TcpConnection对象的生存期应该长于HandleEvent函数，如果做到这一点，可以利用shared_ptr来管理TcpConnection对象。
+TcpConnection的removeConnection，erase将这个连接对象从列表中移除。按照正常的思路，我们还应该将这个对象销毁掉，但是在这里我们不能立即销毁这个连接对象，如果销毁了这个对象，TcpConnection所包含的Channel对象也就跟着销毁了。而当前正在调用这个Channel对象的handleEvent函数，而这个Channel对象又销毁了，就会出现coredump。因而这个不能销毁TcpConnection对象，也就是说TcpConnection对象的生存期应该长于HandleEvent函数，如何做到这一点，可以利用shared_ptr来管理TcpConnection对象。
 
 当连接到来，创建一个TcpConnection对象，立刻用shared_ptr来管理，这时候引用计数为1。
 
