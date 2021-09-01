@@ -1,3 +1,5 @@
+@[toc]
+
 本文分为三个部分：
 1. 由Reactor模型理解muudo的网络库模型
 2. base部分的部分理解
@@ -116,6 +118,14 @@ muduo 默认是单线程模型的，即只有一个线程，里面对应一个 E
 如果设置了子 Reactor，新的连接会通过 Round Robin 的方式分配给其中一个 EventLoop 来管理。如果没有设置子 Reactor，则是默认的单线程模型，新的连接会再由主 Reactor 进行管理。
 
 但其实这里似乎有些不合适的地方：多个 TcpServer 之间可以共享同一个主 EventLoop，但是子 Eventloop 线程池却不能共享，这个是每个 TcpServer 独有的。不过 Netty 的主 EventLoop 和子 Eventloop 池都是可以共享的。
+# 常见并发模型（各自优缺点）
+## iterative服务器
+## process-per-connection
+## thread-per-connetion
+
+IO多路复用，复用的是线程
+
+
 # base
 如何实现一个不能被继承的类：
 
@@ -150,7 +160,7 @@ socket阻塞和非阻塞有哪些不同
 > 
 >> 非阻塞模式下调用accept()函数立即返回，有连接返回客户端套接字描述符，没有新连接时，将返回EWOULDBLOCK错误码，表示本来应该阻塞。
 
-muduo使用的是非阻塞IO
+muduo使用的是非阻塞IO，和IO多路复用结合起来的一般都是非阻塞。
 封装了socket套接字编程，诸Listen/bind/accept方法等等，有的是调用SocketOps.h的接口
 
 ## SocketOps
@@ -175,7 +185,6 @@ void setNonBlockAndCloseOnExec(int sockfd)
   (void)ret;
 }
 ```
-## Channel
 
 ## InetAddress
 对sockaddr_in和sockaddr_in6的封装，方便构造，获取ip地址和port
@@ -415,6 +424,7 @@ Acceptor的初始化中，又用该loop初始化了Channel：
 
 EventLoopThreadPool的初始化需要传一个loop来标明baseloop是谁：
 ![image](https://user-images.githubusercontent.com/40709975/131516099-0f25941d-17b8-4add-b315-b950bf764c16.png)
+线程池初始化成功后可以调用一个线程池初始化回调函数，这个函数要由用户手动设置，muduo的测试用例没有设置。
 
 由此可见baseloop（主Reactor）的TcpServer，Acceptor，EventLoopThreadPool和Channel的loop都是同一个。
 start：
@@ -423,6 +433,8 @@ Acceptor::listen----->acceptChannel_.enableReading()------>loop_->updateChannel(
 建立连接：
 ![image](https://user-images.githubusercontent.com/40709975/131464408-950f8d35-9506-4b8c-af79-799614f05722.png)
 ![TcpServer](https://user-images.githubusercontent.com/40709975/131464486-f64a6ad0-b5e4-4b69-ac8b-4845955dcf5b.png)
+
+![image](https://user-images.githubusercontent.com/40709975/131644376-a287a90a-3dbb-42bc-8e5c-01e3f756a56b.png)
 
 关闭连接：
 
@@ -499,4 +511,8 @@ std::equal(start, end, const char*)比较函数
 
 HTTP请求头：http://tools.jb51.net/table/http_header
 HTTP管道化，队头阻塞，管道化/非管道化：https://blog.csdn.net/fesfsefgs/article/details/108294050
+
+# muduo优化：
+1. 就绪事件是按时间放在就绪队列里的，并没有做优先级区分
+2. muduo多线程模型优化：为每个连接的每个请求也新建线程去处理，而不是在同一个线程中
 
