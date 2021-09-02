@@ -212,6 +212,8 @@ Poller使用一个map来存放描述符fd和对应的Channel类型的指针，
 
 ## PollPoller
 封装了高级IO：poll
+![image](https://user-images.githubusercontent.com/40709975/131802763-bef67e37-95db-45c9-afaa-d6c7fe67f655.png)
+
 pollfds_存放pollfd的数组，用来传入poll模式中的第一个事件集合参数：
  ```
  int numEvents = ::poll(&*pollfds_.begin(), pollfds_.size(), timeoutMs);
@@ -224,14 +226,34 @@ pollfds_存放pollfd的数组，用来传入poll模式中的第一个事件集�
 ## select和poll在内核态的遍历：
 将用户传入的数组拷贝到内核空间，然后查询每个fd对应的设备状态，如果设备就绪则在设备等待队列中加入一项并继续遍历，如果遍历完所有fd后没有发现就绪设备，则挂起当前进程，直到设备就绪或者主动超时，被唤醒后它又要再次遍历fd。这个过程经历了多次无谓的遍历。
 
+epoll在醒着的时候只需要去检测就绪队列有无就绪的事件就行，不需要去遍历。
+
+
 ## EPollPoller
 封装了高级IO：epoll
 muduo的epoll采用的是水平触发
 原因：
 1. 与传统的poll兼容，在文件描述符数目较少而活跃的文件描述符数目又较多时，回调函数触发太频繁，此时的poll甚至比epoll效率更高。（epoll试用于连接较多，活动较少的情况）
 2. 水平触发编程更加简单，不会有漏掉事件的bug
-3. 读写的时候不必等候出现EAGAIN，可以节省系统调用次数，降低延迟
+3. 读写的时候不必等候出现EAGAIN，可以节省系统调用次数，降低延迟。（ET模式下，read一个fd的时候一定要把它的buffer读光，也就是说一直读到read的返回值小于请求值，或者遇到EAGAIN错误）
 在VxWorks和Windows上，EAGAIN的名字叫做EWOULDBLOCK。在linux进行非阻塞的socket接收数据时经常出现Resource temporarily unavailable，errno代码为11(EAGAIN)，该错误不会破坏socket的同步。对非阻塞socket而言，EAGAIN不是一种错误。
+
+epoll水平触发和边缘触发的区别：
+水平模式下，只要有事件就绪，不管是哪个文件描述符的，它就会一直通知。
+边缘触发：文件描述符A的可读写事件就绪，通知一次。如果没有一次性读取完毕，下一次文件描述符B的可读事件就绪，通知用户的时候不会通知A还没读完，只会通知B的，只有等到A文件描述符再次有事件就绪时，才会通知。这种模式比水平触发效率高，系统不会充斥大量你不关心的就绪文件描述符。
+## epoll优点
+select/poll一般只能处理几千的并发连接。
+epoll能监控的文件描述符没有上限，1G内存大概能监控10W个端口
+效率提升，不用轮询，只有活跃事件才会调用回调函数
+select和poll在内核态需要遍历，epoll只需要查看就绪队列
+每次调用select和poll都需要有用户态到内核态的拷贝，而且每次都需要把当前进程挂到设备等待队列中，epoll只需要一次拷贝，而且也只需要把进程挂一次等待对列(注意这里的等待队列并不是设备等待队列，只是一个epoll内部定义的等待队列)
+struct epitem{
+    struct rb_node  rbn;//红黑树节点
+    struct list_head    rdllink;//双向链表节点
+    struct epoll_filefd  ffd;  //事件句柄信息
+    struct eventpoll *ep;    //指向其所属的eventpoll对象
+    struct epoll_event event; //期待发生的事件类型
+}
 
 EpollPoller和PollPoller的主要区别是Epoll的index和operation一一对应，而Poll的index是数组下标
 ```
