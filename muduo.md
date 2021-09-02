@@ -461,9 +461,6 @@ TcpConnection的removeConnection，erase将这个连接对象从列表中移除�
 
 当连接关闭，调用了Channel的handleEvent函数，在这个函数中，将tie_提升，得到一个shared_ptr对象，此时引用计数为2。
 
-erase从列表中移除，引用计数减1，还剩1，因而TcpConnection对象不会销毁。
-
-此时，会调用queueInLoop将connectDestroyed放到EventLoop的functors中，这个时候引用计数加1，变为2(此时，close的回调到此结束，栈帧会回退，直到handleEvent函数返回)。handleEvent函数返回之后，它所提升的那个shared_ptr对象销毁了，引用计数减1，变为1。boost::function调用用户的函数connCb，引用计数减1变为0。TcpConnection对象就销毁了。
 
 
 ## TcpClient
