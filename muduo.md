@@ -212,23 +212,26 @@ Poller使用一个map来存放描述符fd和对应的Channel类型的指针，
 
 ## PollPoller
 封装了高级IO：poll
-PollPoller的数据成员有：
-```
-private:
-     typedef std::vector<struct pollfd> PollFdList;
-     PollFdList pollfds_;//存放需要监听的事件，pollfd结构体中有三个字段：fd、events、revents
-```
-这是一个存放pollfd的数组，用来传入poll模式中的第一个事件集合参数：
+pollfds_存放pollfd的数组，用来传入poll模式中的第一个事件集合参数：
  ```
  int numEvents = ::poll(&*pollfds_.begin(), pollfds_.size(), timeoutMs);
 ```
+缺点：当事件就绪时，用户并不知道哪些事件就绪了，需要遍历pollfds_，如果pollfds_的某个元素（假设为A）的revents字段大于0，则说明该事件就绪，此时会到channels_这个map里根据fd找到对应的channel，将pollfds_中A的revents字段赋值给对应channel的revents字段，然后把该channel放到活跃事件数组activeChannel中。
+
 事件的fd的修改技巧：
 不直接修改为-1，而是改为-fd-1。方便后续还原（还原是为了去map中寻找对应的channel），还原方式仍为：-fd-1
 
+## select和poll在内核态的遍历：
+将用户传入的数组拷贝到内核空间，然后查询每个fd对应的设备状态，如果设备就绪则在设备等待队列中加入一项并继续遍历，如果遍历完所有fd后没有发现就绪设备，则挂起当前进程，直到设备就绪或者主动超时，被唤醒后它又要再次遍历fd。这个过程经历了多次无谓的遍历。
 
 ## EPollPoller
 封装了高级IO：epoll
 muduo的epoll采用的是水平触发
+原因：
+1. 与传统的poll兼容，在文件描述符数目较少而活跃的文件描述符数目又较多时，回调函数触发太频繁，此时的poll甚至比epoll效率更高。（epoll试用于连接较多，活动较少的情况）
+2. 水平触发编程更加简单，不会有漏掉事件的bug
+3. 读写的时候不必等候出现EAGAIN，可以节省系统调用次数，降低延迟
+在VxWorks和Windows上，EAGAIN的名字叫做EWOULDBLOCK。在linux进行非阻塞的socket接收数据时经常出现Resource temporarily unavailable，errno代码为11(EAGAIN)，该错误不会破坏socket的同步。对非阻塞socket而言，EAGAIN不是一种错误。
 
 EpollPoller和PollPoller的主要区别是Epoll的index和operation一一对应，而Poll的index是数组下标
 ```
